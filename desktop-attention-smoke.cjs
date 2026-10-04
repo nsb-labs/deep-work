@@ -44,6 +44,17 @@ else if(q.id===101){send({method:'session/update',params:{sessionId:'synthetic',
       }
       throw new Error('Timed out: ' + code);
     };
+    await poll(`!!document.querySelector('.console-toggle')`);
+    if (await js(`!!document.querySelector('.console-body')`))
+      throw new Error('Idle console should start collapsed');
+    await js(`document.querySelector('.console-toggle').click()`);
+    if (
+      !(await js(
+        `document.querySelector('.console-body')?.textContent.includes('No active Kiro session')`,
+      ))
+    )
+      throw new Error('Manual idle console did not open');
+    await js(`document.querySelector('.console-toggle').click()`);
     await js(
       `(async()=>{const s=await window.workAPI.request('snapshot');await window.workAPI.request('settings',{...s.settings,provider:'kiro',executable:${JSON.stringify(fake)},execution:'native',organizationApproved:true});const task=await window.workAPI.request('addTask',{title:'Synthetic approval task'});await window.workAPI.request('chat',{taskId:task.id,userContext:'Show approval'});})()`,
     );
@@ -83,7 +94,7 @@ else if(q.id===101){send({method:'session/update',params:{sessionId:'synthetic',
     );
     if (!stale) throw new Error('Stale approval accepted');
     console.log(
-      'PASS: live worker ACP approval, auto-expand, collapse, deny/resume, stale decision rejection, light theme.',
+      'PASS: manual idle console open/close, live worker ACP approval, auto-expand, collapse, deny/resume, stale decision rejection, light theme.',
     );
     app.quit();
   })().catch((error) => {

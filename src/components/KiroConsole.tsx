@@ -15,7 +15,7 @@ export function KiroConsole({
   onStop: (jobId: string) => Promise<unknown>;
   onRetry: (jobId: string) => Promise<unknown>;
   onDismiss: (jobId: string) => Promise<unknown>;
-}): React.JSX.Element | null {
+}): React.JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [submitting, setSubmitting] = useState('');
   const seen = useRef(new Set<string>());
@@ -32,7 +32,6 @@ export function KiroConsole({
     if (ids.some((id) => !seen.current.has(id))) setExpanded(true);
     ids.forEach((id) => seen.current.add(id));
   }, [attentionKey]);
-  if (!sessions.length && !failures.length) return null;
   return (
     <section className="kiro-console" aria-label="Kiro console">
       <button
@@ -40,8 +39,12 @@ export function KiroConsole({
         aria-expanded={expanded}
         onClick={() => setExpanded(!expanded)}
       >
-        {expanded ? '▾' : '▸'} Kiro console ·{' '}
-        {attentionIds.length ? `${attentionIds.length} need attention` : 'Session running'}
+        {expanded ? '▾ Hide' : '▸ Open'} Kiro console ·{' '}
+        {attentionIds.length
+          ? `Attention required (${attentionIds.length})`
+          : sessions.length
+            ? 'Session running'
+            : 'No active session'}
       </button>
       {expanded && (
         <div className="console-body">
@@ -49,6 +52,11 @@ export function KiroConsole({
             Live Kiro session output and permission choices. Requests expire after five minutes.
             Hiding this panel keeps the session running.
           </p>
+          {!sessions.length && !failures.length && (
+            <p className="muted">
+              No active Kiro session. Output appears here when Kiro runs a task or processes email.
+            </p>
+          )}
           {sessions.map((session) => (
             <article key={session.jobId}>
               <div className="actions">

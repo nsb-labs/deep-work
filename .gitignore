@@ -1,0 +1,34 @@
+node_modules/
+dist/
+dist-electron/
+release/
+*.log
+.env
+
+# Local mail, agent state, and credentials (synthetic fixtures live in examples/).
+.env.*
+!.env.example
+/memory/
+/workspace/
+/workspaces/
+/.kiro/
+/deepwork.local.json
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.pst
+*.ost
+*.eml
+*.msg
+.DS_Store
+*.tsbuildinfo
+
+# Generated personal outputs, histories, and temporary agent results
+/drafts/
+/summaries/
+/jobs/
+/preferences.json
+/projection-manifest.json
+/deepwork.sqlite
+/.codex/

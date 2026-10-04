@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background gradient: deep navy to dark purple -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f1629"/>
+      <stop offset="50%" style="stop-color:#1a1a3e"/>
+      <stop offset="100%" style="stop-color:#1e1145"/>
+    </linearGradient>
+    <!-- Accent gradient: electric blue to cyan -->
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#06b6d4"/>
+    </linearGradient>
+    <!-- Glow gradient for the focus ring -->
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#60a5fa"/>
+      <stop offset="100%" style="stop-color:#a78bfa"/>
+    </linearGradient>
+    <!-- Subtle inner shadow -->
+    <filter id="innerGlow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <!-- Drop shadow for depth -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="url(#bg)"/>
+
+  <!-- Subtle border -->
+  <rect x="16" y="16" width="480" height="480" rx="96" ry="96" fill="none" stroke="#2563eb" stroke-width="2" opacity="0.3"/>
+
+  <!-- Central "deep focus" ring — represents the concentration/focus aspect -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="url(#glow)" stroke-width="4" opacity="0.4"/>
+  <circle cx="256" cy="256" r="110" fill="none" stroke="url(#accent)" stroke-width="3" opacity="0.6"/>
+
+  <!-- Stylized "D" letterform — bold, modern, representing DeepWork -->
+  <path d="M 180 150 L 180 362 L 260 362 C 330 362 380 310 380 256 C 380 202 330 150 260 150 Z"
+        fill="none" stroke="url(#accent)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"
+        filter="url(#shadow)"/>
+
+  <!-- Inner "W" accent marks — three small diagonal strokes suggesting work/waves -->
+  <g stroke="url(#glow)" stroke-width="8" stroke-linecap="round" opacity="0.9">
+    <line x1="220" y1="230" x2="238" y2="280"/>
+    <line x1="238" y1="280" x2="256" y2="240"/>
+    <line x1="256" y1="240" x2="274" y2="280"/>
+    <line x1="274" y1="280" x2="292" y2="230"/>
+  </g>
+
+  <!-- Activity pulse dot — top right, like a notification/live indicator -->
+  <circle cx="400" cy="120" r="18" fill="#3b82f6" opacity="0.8"/>
+  <circle cx="400" cy="120" r="10" fill="#60a5fa"/>
+  <circle cx="400" cy="120" r="5" fill="#ffffff" opacity="0.9"/>
+
+  <!-- Subtle grid lines in the background — suggesting data/dashboard -->
+  <g stroke="#3b82f6" stroke-width="0.5" opacity="0.1">
+    <line x1="80" y1="150" x2="432" y2="150"/>
+    <line x1="80" y1="256" x2="432" y2="256"/>
+    <line x1="80" y1="362" x2="432" y2="362"/>
+    <line x1="160" y1="100" x2="160" y2="412"/>
+    <line x1="256" y1="100" x2="256" y2="412"/>
+    <line x1="352" y1="100" x2="352" y2="412"/>
+  </g>
+</svg>

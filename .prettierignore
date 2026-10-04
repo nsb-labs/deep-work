@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-electron
+release
+package-lock.json
+workspace
+workspaces
+memory
+drafts
+summaries
+jobs
+*.ps1

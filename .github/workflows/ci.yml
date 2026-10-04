@@ -1,0 +1,22 @@
+name: Development checks
+on:
+  push:
+  pull_request:
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+      - if: runner.os == 'Windows'
+        run: npm run smoke:desktop

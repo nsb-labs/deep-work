@@ -1,0 +1,77 @@
+{
+  "name": "deepwork",
+  "version": "2.0.0",
+  "description": "Local Outlook work dashboard with tasks, contextual AI drafts, and evidence-backed memory",
+  "main": "dist-electron/main.js",
+  "author": "Naveen Bhandari",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "start": "electron .",
+    "dist": "npm run build && electron-builder --win",
+    "test": "node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "smoke:desktop": "electron desktop-smoke.cjs",
+    "verify:outlook": "node scripts/verify-outlook.cjs",
+    "format": "prettier --write src electron service tests scripts docs desktop-smoke.cjs README.md CONTRIBUTING.md SECURITY.md package.json tsconfig*.json vite.config.mts .github",
+    "format:check": "prettier --check src electron service tests scripts docs desktop-smoke.cjs README.md CONTRIBUTING.md SECURITY.md package.json tsconfig*.json vite.config.mts .github"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "sql.js": "1.13.0"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "prettier": "3.9.9",
+    "typescript": "5.6.3",
+    "vite": "8.3.2",
+    "vite-plugin-electron": "1.1.2"
+  },
+  "build": {
+    "appId": "org.deepwork.desktop",
+    "productName": "DeepWork",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "service/**/*.cjs",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "service/connectors/outlook.ps1",
+        "to": "outlook.ps1"
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/sql.js/dist/*.wasm"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "engines": {
+    "node": ">=22.14.0 <23"
+  }
+}

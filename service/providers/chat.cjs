@@ -27,7 +27,7 @@ function jsonLines(consume) {
     },
   };
 }
-function codexProtocol(prompt, cwd, emit) {
+function codexProtocol(prompt, cwd, emit, onConsole = () => {}) {
   let send,
     end,
     complete = false;
@@ -59,6 +59,7 @@ function codexProtocol(prompt, cwd, emit) {
         return;
       }
       if (event.id === 1) {
+        onConsole('Codex session connected.');
         send({ method: 'initialized', params: {} });
         send({
           id: 2,
@@ -73,6 +74,7 @@ function codexProtocol(prompt, cwd, emit) {
       } else if (event.id === 2) {
         const threadId = event.result?.thread?.id;
         if (!threadId) throw new Error('Codex returned no thread');
+        onConsole('Codex is processing the task.');
         send({
           id: 3,
           method: 'turn/start',
@@ -80,6 +82,13 @@ function codexProtocol(prompt, cwd, emit) {
         });
       }
       const p = event.params;
+      if (
+        ['item/started', 'item/completed'].includes(event.method) &&
+        p?.item?.type !== 'agentMessage'
+      )
+        onConsole(
+          `${String(p?.item?.type || 'Activity').replace(/([a-z])([A-Z])/g, '$1 $2')}: ${event.method === 'item/started' ? 'started' : 'completed'}`,
+        );
       if (event.method === 'item/agentMessage/delta' && typeof p?.delta === 'string') {
         items.set(p.itemId, (items.get(p.itemId) || '') + p.delta);
         publish();
@@ -113,7 +122,15 @@ async function runChat(input, directory, signal, emit, options = {}) {
   let args, protocol;
   if (p.provider === 'codex') {
     args = ['app-server'];
-    protocol = codexProtocol(prompt, p.execution === 'wsl' ? wslPath(directory) : directory, emit);
+    protocol = codexProtocol(
+      prompt,
+      p.execution === 'wsl' ? wslPath(directory) : directory,
+      (answer) => {
+        options.onOutput?.(answer);
+        emit(answer);
+      },
+      options.onConsole,
+    );
   } else {
     const { runKiro } = require('./kiro-acp.cjs');
     return runKiro(prompt, directory, p, signal, { ...options, emit });

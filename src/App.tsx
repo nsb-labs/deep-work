@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Markdown } from './components/Markdown';
-import { KiroConsole } from './components/KiroConsole';
+import { CliConsole } from './components/CliConsole';
 import { TaskChat } from './components/TaskChat';
 import { Settings } from './components/Settings';
 import { TaskEditor } from './components/TaskEditor';
@@ -672,8 +672,9 @@ function App(): React.JSX.Element {
         )}
       </div>
       {snapshot && (
-        <KiroConsole
+        <CliConsole
           sessions={snapshot.sessions || []}
+          provider={snapshot.settings.provider}
           jobs={snapshot.jobs}
           onDecision={(value) => action('permission', value)}
           onStop={(jobId) => action('cancel', jobId)}

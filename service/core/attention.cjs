@@ -2,8 +2,9 @@ const { randomUUID } = require('node:crypto');
 
 // Live callbacks never enter SQLite. A persisted approval cannot authorize a later process.
 class AttentionSession {
-  constructor(jobId, { onChange, audit, signal, timeout = 300000 }) {
+  constructor(jobId, { onChange, audit, signal, timeout = 300000, provider = 'kiro' }) {
     this.jobId = jobId;
+    this.provider = provider;
     this.onChange = onChange;
     this.audit = audit;
     this.signal = signal;
@@ -22,6 +23,7 @@ class AttentionSession {
   snapshot() {
     return {
       jobId: this.jobId,
+      provider: this.provider,
       transcript: this.transcript,
       answer: this.answer,
       requests: [...this.pending.values()].map(({ view }) => view),
@@ -30,16 +32,16 @@ class AttentionSession {
   request(value) {
     if (this.signal.aborted) return Promise.resolve(null);
     const options = value.options.map(({ optionId, name, kind }) => {
-      if (optionId.length > 200 || name.length > 500) throw new Error('Kiro choice exceeded limit');
+      if (optionId.length > 200 || name.length > 500) throw new Error('CLI choice exceeded limit');
       return { optionId, name, kind };
     });
     if (new Set(options.map((o) => o.optionId)).size !== options.length)
-      throw new Error('Duplicate Kiro permission choices');
-    if (this.pending.size >= 10) throw new Error('Too many Kiro permission requests');
+      throw new Error('Duplicate CLI permission choices');
+    if (this.pending.size >= 10) throw new Error('Too many CLI permission requests');
     const requestId = randomUUID();
     const details = JSON.stringify(value.toolCall || {}, null, 2);
     if (Buffer.byteLength(details) > 16000)
-      throw new Error('Kiro permission details exceeded limit');
+      throw new Error('CLI permission details exceeded limit');
     return new Promise((resolve) => {
       const finish = (optionId, reason) => {
         if (!this.pending.has(requestId)) return;
@@ -59,7 +61,7 @@ class AttentionSession {
       this.pending.set(requestId, {
         view: {
           requestId,
-          title: String(value.toolCall?.title || 'Kiro requests permission').slice(0, 500),
+          title: String(value.toolCall?.title || 'CLI requests permission').slice(0, 500),
           details,
           options,
           expiresAt: new Date(Date.now() + this.timeout).toISOString(),
@@ -67,7 +69,9 @@ class AttentionSession {
         finish,
       });
       this.signal.addEventListener('abort', abort, { once: true });
-      this.log('Kiro needs your attention. Choose an option to continue this session.');
+      this.log(
+        `${this.provider === 'codex' ? 'Codex' : 'Kiro'} needs your attention. Choose an option to continue this session.`,
+      );
     });
   }
   close() {

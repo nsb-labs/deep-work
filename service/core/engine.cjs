@@ -83,7 +83,7 @@ class WorkEngine {
             ['queued', 'running', 'awaiting_approval'].includes(j.status) || i >= all.length - 100,
         )
         .reverse()
-        .map(({ payload, ...j }) => j),
+        .map(({ payload, ...j }) => ({ ...j, provider: j.settings.provider })),
       sessions: [...this.sessions.values()].map((session) => session.snapshot()),
       sync: this.store.get('sync', 'latest'),
       exportError: this.halted || this.exportError,
@@ -868,10 +868,13 @@ class WorkEngine {
             const directory = path.join(this.store.root, 'jobs', job.id);
             fs.mkdirSync(directory, { recursive: true });
             const session = new AttentionSession(job.id, {
+              provider: job.settings.provider,
               signal: this.controller.signal,
               timeout: this.options.approvalTimeout || 300000,
               audit: (decision) =>
-                this.store.transaction(() => this.store.event('kiro.permission', job.id, decision)),
+                this.store.transaction(() =>
+                  this.store.event(`${job.settings.provider}.permission`, job.id, decision),
+                ),
               onChange: () => {
                 const current = this.store.get('job', job.id);
                 if (!['running', 'awaiting_approval'].includes(current.status)) return;
@@ -883,7 +886,8 @@ class WorkEngine {
                   });
               },
             });
-            if (job.settings.provider === 'kiro') this.sessions.set(job.id, session);
+            if (['kiro', 'codex'].includes(job.settings.provider))
+              this.sessions.set(job.id, session);
             const providerOptions = {
               onConsole: (text) => session.log(text),
               onOutput: (text) => session.output(text),
@@ -936,7 +940,7 @@ class WorkEngine {
             const current = this.store.get('job', job.id);
             if (current.status !== 'cancelled') {
               current.status =
-                job.settings.provider === 'kiro' && !error.terminationUnconfirmed
+                ['kiro', 'codex'].includes(job.settings.provider) && !error.terminationUnconfirmed
                   ? 'needs_attention'
                   : 'failed';
               current.error = String(error.message || error).slice(0, 1000);
@@ -1041,7 +1045,7 @@ class WorkEngine {
         if (!value || typeof value.jobId !== 'string')
           throw new Error('Invalid permission decision');
         const session = this.sessions.get(value.jobId);
-        if (!session) throw new Error('Kiro session is no longer active');
+        if (!session) throw new Error('CLI session is no longer active');
         return session.decide(value);
       }
       case 'retry':

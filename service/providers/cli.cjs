@@ -99,6 +99,7 @@ async function runCli(input, directory, signal, options = {}) {
   const p = input.settings;
   if (!p.organizationApproved)
     throw new Error('Configure an organization-approved CLI before processing real email');
+  if (!['kiro', 'codex'].includes(p.provider)) throw new Error('Unsupported CLI provider');
   const prompt = promptFor(input);
   if (p.provider === 'kiro') {
     const { runKiro } = require('./kiro-acp.cjs');
@@ -114,6 +115,7 @@ async function runCli(input, directory, signal, options = {}) {
       '--ask-for-approval',
       'never',
       'exec',
+      '--json',
       '--skip-git-repo-check',
       '--sandbox',
       'read-only',
@@ -125,21 +127,41 @@ async function runCli(input, directory, signal, options = {}) {
     ];
   }
   const { launch, onStop } = prepareLaunch(p, args, directory);
-  const result = await runProcess(launch.command, launch.args, {
+  const { jsonLines } = require('./chat.cjs');
+  const events = jsonLines((event) => {
+    if (
+      ['thread.started', 'turn.started', 'turn.completed', 'turn.failed', 'error'].includes(
+        event.type,
+      )
+    )
+      options.onConsole?.(`Codex: ${event.type.replaceAll('.', ' ')}`);
+    if (['item.started', 'item.completed'].includes(event.type)) {
+      if (event.item?.type === 'agent_message' && typeof event.item.text === 'string')
+        options.onOutput?.(event.item.text);
+      else
+        options.onConsole?.(
+          `Codex activity: ${String(event.item?.type || 'item').replaceAll('_', ' ')} ${event.type === 'item.started' ? 'started' : 'completed'}`,
+        );
+    }
+  });
+  options.onConsole?.('Starting Codex processing.');
+  await (options.run || runProcess)(launch.command, launch.args, {
     cwd: directory,
     input: prompt,
+    onStdout: (chunk) => events.push(chunk),
     signal,
     onStop,
     timeout: p.timeoutSeconds * 1000,
     env: { ...process.env, NO_COLOR: '1', KIRO_NO_PROGRESS: '1', KIRO_NO_HYPERLINKS: '1' },
   });
+  events.end();
   if (p.provider === 'codex') {
     const file = path.join(directory, 'result.json');
     if (!fs.existsSync(file) || fs.statSync(file).size > 4 * 1024 * 1024)
       throw new Error('Codex produced no valid result artifact');
     return parseJsonResult(fs.readFileSync(file, 'utf8'));
   }
-  return parseKiroResult(result.stdout);
+  throw new Error('Unsupported CLI provider');
 }
 async function probe(p, cwd) {
   const launch = invocation(p, ['--version'], cwd);

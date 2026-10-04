@@ -17,9 +17,11 @@ if (process.platform === 'win32') {
     `#!/usr/bin/env node
 const rl=require('node:readline').createInterface({input:process.stdin});
 const send=q=>process.stdout.write(JSON.stringify(q)+'\\n');
+const codex=process.argv.includes('app-server');
 rl.on('line',line=>{const q=JSON.parse(line);
 if(q.id===1)send({id:1,result:{protocolVersion:1}});
-else if(q.id===2)send({id:2,result:{sessionId:'synthetic',modes:{currentModeId:'deepwork'}}});
+else if(q.id===2)send(codex?{id:2,result:{thread:{id:'synthetic'}}}:{id:2,result:{sessionId:'synthetic',modes:{currentModeId:'deepwork'}}});
+else if(q.id===3&&codex){send({method:'item/agentMessage/delta',params:{itemId:'answer',delta:'Synthetic Codex output'}});setTimeout(()=>send({method:'turn/completed',params:{turn:{status:'completed'}}}),6000);}
 else if(q.id===3){send({method:'session/update',params:{sessionId:'synthetic',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'Waiting for your decision.'}}}});
 send({id:101,method:'session/request_permission',params:{sessionId:'synthetic',toolCall:{toolCallId:'read',title:'Read synthetic configuration',rawInput:{path:'synthetic.txt'}},options:[{optionId:'yes',name:'Approve once',kind:'allow_once'},{optionId:'no',name:'Deny',kind:'reject_once'}]}});}
 else if(q.id===101){send({method:'session/update',params:{sessionId:'synthetic',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:' Decision received: '+q.result.outcome.optionId}}}});send({id:3,result:{stopReason:'end_turn'}});}});
@@ -50,7 +52,7 @@ else if(q.id===101){send({method:'session/update',params:{sessionId:'synthetic',
     await js(`document.querySelector('.console-toggle').click()`);
     if (
       !(await js(
-        `document.querySelector('.console-body')?.textContent.includes('No active Kiro session')`,
+        `document.querySelector('.console-body')?.textContent.includes('No active CLI session')`,
       ))
     )
       throw new Error('Manual idle console did not open');
@@ -93,8 +95,27 @@ else if(q.id===101){send({method:'session/update',params:{sessionId:'synthetic',
       `window.workAPI.request('permission',{jobId:${JSON.stringify(job.id)},requestId:${JSON.stringify(request.requestId)},optionId:'yes'}).then(()=>false,()=>true)`,
     );
     if (!stale) throw new Error('Stale approval accepted');
+    await js(
+      `(async()=>{const s=await window.workAPI.request('snapshot');await window.workAPI.request('settings',{...s.settings,provider:'codex',executable:${JSON.stringify(fake)}});const task=await window.workAPI.request('addTask',{title:'Synthetic Codex task'});await window.workAPI.request('chat',{taskId:task.id,userContext:'Show output'});})()`,
+    );
+    await poll(`document.querySelector('.console-toggle')?.textContent.includes('Codex console')`);
+    await poll(
+      `document.querySelector('.console-body')?.textContent.includes('Synthetic Codex output')`,
+    );
+    const codexSnapshot = await js(`window.workAPI.request('snapshot')`);
+    const codexSession = codexSnapshot.sessions.find((s) => s.provider === 'codex');
+    if (!codexSession) throw new Error('Codex session provider not preserved');
+    await js(
+      `(async()=>{const s=await window.workAPI.request('snapshot');await window.workAPI.request('settings',{...s.settings,provider:'kiro'});})()`,
+    );
+    await poll(`document.querySelector('.console-toggle')?.textContent.includes('Kiro console')`);
+    if (
+      !(await js(`document.querySelector('.console-body')?.textContent.includes('Codex · chat')`))
+    )
+      throw new Error('Settings change relabeled active Codex session');
+    await js(`window.workAPI.request('cancel',${JSON.stringify(codexSession.jobId)})`);
     console.log(
-      'PASS: manual idle console open/close, live worker ACP approval, auto-expand, collapse, deny/resume, stale decision rejection, light theme.',
+      'PASS: manual idle console open/close, live worker ACP approval, auto-expand, collapse, deny/resume, stale decision rejection, light theme, Codex output, provider switching.',
     );
     app.quit();
   })().catch((error) => {

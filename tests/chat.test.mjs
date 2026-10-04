@@ -165,7 +165,9 @@ test('chat transport drives a real duplex subprocess and forwards partial output
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deepwork-chat-provider-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const fakeServer = `const readline=require('node:readline');const rl=readline.createInterface({input:process.stdin});const send=e=>process.stdout.write(JSON.stringify(e)+'\\n');rl.on('line',line=>{const q=JSON.parse(line);if(q.id===1)send({id:1,result:{}});if(q.id===2)send({id:2,result:{thread:{id:'t'}}});if(q.id===3){send({method:'item/agentMessage/delta',params:{itemId:'a',delta:'First'}});setTimeout(()=>{send({method:'item/agentMessage/delta',params:{itemId:'a',delta:' second'}});send({method:'turn/completed',params:{turn:{status:'completed'}}});},30);}});`;
-  const updates = [];
+  const updates = [],
+    consoleOutput = [],
+    consoleProgress = [];
   const answer = await runChat(
     {
       settings: {
@@ -184,6 +186,8 @@ test('chat transport drives a real duplex subprocess and forwards partial output
     null,
     (text) => updates.push(text),
     {
+      onOutput: (text) => consoleOutput.push(text),
+      onConsole: (text) => consoleProgress.push(text),
       run: (_command, args, options) => {
         assert.deepEqual(args, ['app-server']);
         return runProcess(process.execPath, ['-e', fakeServer], options);
@@ -192,4 +196,6 @@ test('chat transport drives a real duplex subprocess and forwards partial output
   );
   assert.deepEqual(updates, ['First', 'First second']);
   assert.equal(answer, 'First second');
+  assert.deepEqual(consoleOutput, updates);
+  assert.ok(consoleProgress.includes('Codex session connected.'));
 });

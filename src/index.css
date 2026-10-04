@@ -607,7 +607,7 @@ textarea {
   margin-top: 10px;
 }
 
-.kiro-console {
+.cli-console {
   border-top: 1px solid var(--divider);
   background: var(--detail);
   flex-shrink: 0;

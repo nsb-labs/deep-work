@@ -50,3 +50,42 @@ test('process output preserves Unicode split across byte chunks', async () => {
   ]);
   assert.equal(result.stdout, '€');
 });
+
+test('Codex structured processing exposes progress and answer while preserving schema result validation', async (t) => {
+  const fs = require('node:fs'),
+    os = require('node:os'),
+    path = require('node:path');
+  const { runCli } = require('../service/providers/cli.cjs');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'deepwork-codex-console-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const progress = [],
+    output = [];
+  const result = await runCli(
+    {
+      settings: {
+        provider: 'codex',
+        execution: 'native',
+        organizationApproved: true,
+        timeoutSeconds: 10,
+      },
+    },
+    directory,
+    null,
+    {
+      onConsole: (value) => progress.push(value),
+      onOutput: (value) => output.push(value),
+      run: (_command, args, options) => {
+        assert.ok(args.includes('--json'));
+        const file = args[args.indexOf('--output-last-message') + 1];
+        const script = `process.stdin.resume();process.stdin.on('end',()=>{
+        require('node:fs').writeFileSync(${JSON.stringify(file)},JSON.stringify({text:'Summary',changes:[],facts:[]}));
+        for(const event of [{type:'turn.started'},{type:'item.completed',item:{type:'agent_message',text:'Summary'}},{type:'turn.completed'}])process.stdout.write(JSON.stringify(event)+'\\n');});`;
+        return runProcess(process.execPath, ['-e', script], options);
+      },
+    },
+  );
+  assert.equal(result.text, 'Summary');
+  assert.deepEqual(output, ['Summary']);
+  assert.ok(progress.includes('Codex: turn started'));
+  assert.ok(progress.includes('Codex: turn completed'));
+});

@@ -79,6 +79,7 @@ export interface Fact {
   sourceDate: string;
 }
 export interface Job {
+  provider: Preferences['provider'];
   retriedBy?: string;
   attentionDismissed?: boolean;
   contextStats?: {
@@ -113,7 +114,8 @@ export interface Suggestion {
   change: Change;
   createdAt: string;
 }
-export interface KiroSession {
+export interface CliSession {
+  provider: Preferences['provider'];
   jobId: string;
   transcript: string;
   answer: string;
@@ -126,7 +128,7 @@ export interface KiroSession {
   }[];
 }
 export interface Snapshot {
-  sessions: KiroSession[];
+  sessions: CliSession[];
   workspace: string;
   platform: string;
   settings: Preferences;

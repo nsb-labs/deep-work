@@ -79,6 +79,8 @@ export interface Fact {
   sourceDate: string;
 }
 export interface Job {
+  retriedBy?: string;
+  attentionDismissed?: boolean;
   contextStats?: {
     estimatedTokens: number;
     budget: number;
@@ -111,7 +113,20 @@ export interface Suggestion {
   change: Change;
   createdAt: string;
 }
+export interface KiroSession {
+  jobId: string;
+  transcript: string;
+  answer: string;
+  requests: {
+    requestId: string;
+    title: string;
+    details: string;
+    expiresAt: string;
+    options: { optionId: string; name: string; kind: 'allow_once' | 'reject_once' }[];
+  }[];
+}
 export interface Snapshot {
+  sessions: KiroSession[];
   workspace: string;
   platform: string;
   settings: Preferences;

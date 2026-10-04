@@ -1,5 +1,3 @@
-const fs = require('node:fs');
-const path = require('node:path');
 const { StringDecoder } = require('node:string_decoder');
 const { runProcess } = require('./process.cjs');
 const { prepareLaunch, wslPath } = require('./cli.cjs');
@@ -107,53 +105,6 @@ function codexProtocol(prompt, cwd, emit) {
     },
   };
 }
-function kiroProtocol(emit) {
-  let answer = '';
-  const full = (value) => {
-    const text =
-      typeof value === 'string'
-        ? value
-        : Array.isArray(value)
-          ? value
-              .filter((c) => c.type === 'text')
-              .map((c) => c.text || '')
-              .join('')
-          : '';
-    if (text) {
-      answer = text;
-      emit(answer);
-    }
-  };
-  return {
-    event(event) {
-      if (['error', 'interrupted'].includes(event.type) || event.is_error)
-        throw new Error('Kiro chat failed or was interrupted.');
-      if (['text_delta', 'assistant_text_delta'].includes(event.type)) {
-        const delta = event.text ?? event.data?.text ?? event.delta?.text;
-        if (typeof delta === 'string') {
-          answer += delta;
-          emit(answer);
-        }
-      }
-      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-        answer += event.delta.text;
-        emit(answer);
-      }
-      if (event.type === 'assistant' || (event.type === 'message' && event.role === 'assistant'))
-        full(
-          event.message?.content ??
-            event.content ??
-            event.data?.content ??
-            event.data?.text ??
-            event.text,
-        );
-      if (event.type === 'result' && typeof event.result === 'string') full(event.result);
-    },
-    finish() {
-      return answer;
-    },
-  };
-}
 async function runChat(input, directory, signal, emit, options = {}) {
   const p = input.settings;
   if (!p.organizationApproved)
@@ -164,34 +115,8 @@ async function runChat(input, directory, signal, emit, options = {}) {
     args = ['app-server'];
     protocol = codexProtocol(prompt, p.execution === 'wsl' ? wslPath(directory) : directory, emit);
   } else {
-    if (!p.agent) {
-      const agents = path.join(directory, '.kiro', 'agents');
-      fs.mkdirSync(agents, { recursive: true });
-      fs.writeFileSync(
-        path.join(agents, 'deepwork.json'),
-        JSON.stringify({
-          name: 'deepwork',
-          description: 'Task chat without tools',
-          tools: [],
-          allowedTools: [],
-          resources: [],
-          mcpServers: {},
-          includeMcpJson: false,
-          hooks: {},
-        }),
-      );
-    }
-    args = [
-      'chat',
-      '--agent-engine',
-      'v3',
-      '--no-interactive',
-      '--output-format',
-      'stream-json',
-      '--agent',
-      p.agent || 'deepwork',
-    ];
-    protocol = kiroProtocol(emit);
+    const { runKiro } = require('./kiro-acp.cjs');
+    return runKiro(prompt, directory, p, signal, { ...options, emit });
   }
   const lines = jsonLines((event) => protocol.event(event));
   const { launch, onStop } = prepareLaunch(p, args, directory);
@@ -210,4 +135,4 @@ async function runChat(input, directory, signal, emit, options = {}) {
   if (!answer.trim()) throw new Error('CLI produced no chat answer. Check its streaming format.');
   return answer;
 }
-module.exports = { runChat, jsonLines, codexProtocol, kiroProtocol };
+module.exports = { runChat, jsonLines, codexProtocol };

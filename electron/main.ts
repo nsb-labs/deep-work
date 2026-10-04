@@ -114,6 +114,8 @@ const operations = new Set([
   'chat',
   'cancel',
   'retry',
+  'permission',
+  'dismissAttention',
   'suggestion',
   'fact',
   'openSource',
@@ -136,7 +138,7 @@ ipcMain.handle('work:openWorkspace', async (event) => {
       'DEEPWORK_WORKSPACE selects this development workspace. Remove that environment variable before choosing a different folder.',
     );
   const active = (await request('snapshot')) as { jobs: { status: string }[] };
-  if (active.jobs.some((j) => ['running', 'queued'].includes(j.status)))
+  if (active.jobs.some((j) => ['running', 'queued', 'awaiting_approval'].includes(j.status)))
     throw new Error('Wait for jobs to finish or cancel them before switching workspaces.');
   const result = await dialog.showOpenDialog(mainWindow!, {
     title: 'Choose a DeepWork workspace',

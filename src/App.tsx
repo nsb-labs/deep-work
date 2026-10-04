@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Markdown } from './components/Markdown';
+import { KiroConsole } from './components/KiroConsole';
 import { TaskChat } from './components/TaskChat';
 import { Settings } from './components/Settings';
 import { TaskEditor } from './components/TaskEditor';
@@ -96,7 +97,8 @@ function App(): React.JSX.Element {
     if (result) setMail(result as Message);
   };
   const activeJobs =
-    snapshot?.jobs.filter((j) => ['queued', 'running'].includes(j.status)).length || 0;
+    snapshot?.jobs.filter((j) => ['queued', 'running', 'awaiting_approval'].includes(j.status))
+      .length || 0;
   const pending = snapshot?.messages.filter((m) => m.processedVersion !== m.version).length || 0;
   const tasks = (snapshot?.tasks || []).filter(
     (t) =>
@@ -135,7 +137,9 @@ function App(): React.JSX.Element {
               busy ||
               !snapshot ||
               !!snapshot.jobs.find(
-                (j) => j.operation === 'sync' && ['queued', 'running'].includes(j.status),
+                (j) =>
+                  j.operation === 'sync' &&
+                  ['queued', 'running', 'awaiting_approval'].includes(j.status),
               )
             }
             className="primary"
@@ -505,10 +509,10 @@ function App(): React.JSX.Element {
                         {j.error && <p className="job-error">{j.error}</p>}
                       </div>
                       <div className="actions">
-                        {['queued', 'running'].includes(j.status) && (
+                        {['queued', 'running', 'awaiting_approval'].includes(j.status) && (
                           <button onClick={() => action('cancel', j.id)}>Cancel</button>
                         )}
-                        {['failed', 'cancelled'].includes(j.status) && (
+                        {['failed', 'cancelled', 'needs_attention'].includes(j.status) && (
                           <button onClick={() => action('retry', j.id)}>Retry</button>
                         )}
                       </div>
@@ -667,6 +671,16 @@ function App(): React.JSX.Element {
           </aside>
         )}
       </div>
+      {snapshot && (
+        <KiroConsole
+          sessions={snapshot.sessions || []}
+          jobs={snapshot.jobs}
+          onDecision={(value) => action('permission', value)}
+          onStop={(jobId) => action('cancel', jobId)}
+          onRetry={(jobId) => action('retry', jobId)}
+          onDismiss={(jobId) => action('dismissAttention', jobId)}
+        />
+      )}
       <footer className="work-footer">
         <span>
           {activeJobs ? `${activeJobs} processing jobs` : 'Ready'} · {snapshot?.tasks.length || 0}{' '}

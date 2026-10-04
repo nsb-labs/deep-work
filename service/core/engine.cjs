@@ -1,3 +1,4 @@
+const { AttentionSession } = require('./attention.cjs');
 const path = require('node:path');
 const fs = require('node:fs');
 const { Store } = require('./store.cjs');
@@ -35,8 +36,11 @@ class WorkEngine {
     this.closed = false;
     this.exportError = '';
     this.chatDrafts = new Map();
+    this.sessions = new Map();
     this.store.transaction(() => {
-      for (const job of store.all('job').filter((j) => j.status === 'running')) {
+      for (const job of store
+        .all('job')
+        .filter((j) => ['running', 'awaiting_approval'].includes(j.status))) {
         job.status = 'failed';
         job.error = 'Application stopped during this job. Retry explicitly.';
         job.finishedAt = now();
@@ -74,9 +78,13 @@ class WorkEngine {
       suggestions: this.store.all('suggestion').filter((s) => s.status === 'pending'),
       jobs: this.store
         .all('job')
-        .filter((j, i, all) => ['queued', 'running'].includes(j.status) || i >= all.length - 100)
+        .filter(
+          (j, i, all) =>
+            ['queued', 'running', 'awaiting_approval'].includes(j.status) || i >= all.length - 100,
+        )
         .reverse()
         .map(({ payload, ...j }) => j),
+      sessions: [...this.sessions.values()].map((session) => session.snapshot()),
       sync: this.store.get('sync', 'latest'),
       exportError: this.halted || this.exportError,
     };
@@ -347,7 +355,7 @@ class WorkEngine {
               const source = this.store.get('message', j.payload.messageId);
               return source && source.account === m.account && source.threadId === m.threadId;
             })() &&
-            ['queued', 'running'].includes(j.status),
+            ['queued', 'running', 'awaiting_approval'].includes(j.status),
         )
       )
         return null;
@@ -362,7 +370,7 @@ class WorkEngine {
             (j) =>
               j.operation === 'chat' &&
               j.payload.taskId === payload.taskId &&
-              ['queued', 'running'].includes(j.status),
+              ['queued', 'running', 'awaiting_approval'].includes(j.status),
           )
       )
         throw new Error('Wait for this task’s current chat turn or stop it first.');
@@ -419,22 +427,30 @@ class WorkEngine {
     return jobs;
   }
   cancel(jobId) {
-    return this.mutate(() => {
+    const result = this.mutate(() => {
       const job = this.store.get('job', text(jobId, 'job ID', 100));
-      if (!job || !['queued', 'running'].includes(job.status))
+      if (!job || !['queued', 'running', 'awaiting_approval'].includes(job.status))
         throw new Error('Job is not cancellable');
       job.status = 'cancelled';
       job.finishedAt = now();
       this.store.put('job', job);
       if (job.operation === 'chat') this.finishChat(job, 'cancelled', 'Stopped by user.');
-      if (this.activeId === jobId) this.controller?.abort();
     });
+    if (this.activeId === jobId) this.controller?.abort();
+    if (this.syncId === jobId) this.syncController?.abort();
+    return result;
   }
   retry(jobId) {
     const job = this.store.get('job', text(jobId, 'job ID', 100));
-    if (!job || !['failed', 'cancelled'].includes(job.status))
+    if (!job || !['failed', 'cancelled', 'needs_attention'].includes(job.status))
       throw new Error('Job is not retryable');
-    return this.enqueue(job.operation, { ...job.payload });
+    const retryId = this.enqueue(job.operation, { ...job.payload });
+    if (retryId)
+      this.store.transaction(() => {
+        job.retriedBy = retryId;
+        this.store.put('job', job);
+      });
+    return retryId;
   }
   buildInput(job) {
     const task = job.payload.taskId ? this.requireTask(job.payload.taskId) : null;
@@ -757,7 +773,7 @@ class WorkEngine {
       error,
     });
   }
-  async chatTurn(job, input, directory) {
+  async chatTurn(job, input, directory, providerOptions) {
     let lastPushAt = 0;
     const emit = (answer) => {
       if (this.controller.signal.aborted) return;
@@ -775,7 +791,13 @@ class WorkEngine {
     };
     let answer;
     if (this.options.runChat)
-      answer = await this.options.runChat(input, directory, this.controller.signal, emit);
+      answer = await this.options.runChat(
+        input,
+        directory,
+        this.controller.signal,
+        emit,
+        providerOptions,
+      );
     else if (job.settings.provider === 'demo') {
       answer = `Demo response for **${input.task.title}**.\n\nYour question: ${input.userContext}\n\nCurrent status: ${input.task.status}. ${input.memory.length} related memory facts and ${input.messages.length} email sources are available. Configure an approved CLI for an AI answer.`;
       for (let end = 24; end < answer.length + 24; end += 24) {
@@ -783,7 +805,7 @@ class WorkEngine {
         emit(answer.slice(0, end));
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
-    } else answer = await runChat(input, directory, this.controller.signal, emit);
+    } else answer = await runChat(input, directory, this.controller.signal, emit, providerOptions);
     if (this.controller.signal.aborted) throw new Error('Cancelled');
     if (!answer?.trim()) throw new Error('No chat response');
     emit(answer);
@@ -800,7 +822,9 @@ class WorkEngine {
     this.busy = true;
     try {
       while (!this.closed && !this.halted) {
-        const job = this.store.all('job').find((j) => j.status === 'queued');
+        const job = this.store
+          .all('job')
+          .find((j) => j.status === 'queued' && !(this.syncBusy && j.operation === 'sync'));
         if (!job) break;
         this.activeId = job.id;
         this.controller = new AbortController();
@@ -843,16 +867,43 @@ class WorkEngine {
               throw new Error('Demo provider cannot process real messages');
             const directory = path.join(this.store.root, 'jobs', job.id);
             fs.mkdirSync(directory, { recursive: true });
+            const session = new AttentionSession(job.id, {
+              signal: this.controller.signal,
+              timeout: this.options.approvalTimeout || 300000,
+              audit: (decision) =>
+                this.store.transaction(() => this.store.event('kiro.permission', job.id, decision)),
+              onChange: () => {
+                const current = this.store.get('job', job.id);
+                if (!['running', 'awaiting_approval'].includes(current.status)) return;
+                const status = session.pending.size ? 'awaiting_approval' : 'running';
+                if (current.status !== status)
+                  this.store.transaction(() => {
+                    current.status = status;
+                    this.store.put('job', current);
+                  });
+              },
+            });
+            if (job.settings.provider === 'kiro') this.sessions.set(job.id, session);
+            const providerOptions = {
+              onConsole: (text) => session.log(text),
+              onOutput: (text) => session.output(text),
+              requestPermission: (value) => session.request(value),
+            };
             try {
               if (job.operation === 'chat') {
-                await this.chatTurn(job, input, directory);
+                await this.chatTurn(job, input, directory, providerOptions);
                 continue;
               }
               const result = this.options.runProvider
-                ? await this.options.runProvider(input, directory, this.controller.signal)
+                ? await this.options.runProvider(
+                    input,
+                    directory,
+                    this.controller.signal,
+                    providerOptions,
+                  )
                 : job.settings.provider === 'demo'
                   ? demoResult(input)
-                  : await runCli(input, directory, this.controller.signal);
+                  : await runCli(input, directory, this.controller.signal, providerOptions);
               if (this.controller.signal.aborted) throw new Error('Cancelled');
               this.applyResult(job, input, result);
               if (job.operation === 'classify') {
@@ -874,6 +925,8 @@ class WorkEngine {
                   this.enqueue('classify', { messageId: remainder.id });
               }
             } finally {
+              session.close();
+              this.sessions.delete(job.id);
               fs.rmSync(directory, { recursive: true, force: true });
             }
           }
@@ -882,7 +935,10 @@ class WorkEngine {
           this.store.transaction(() => {
             const current = this.store.get('job', job.id);
             if (current.status !== 'cancelled') {
-              current.status = 'failed';
+              current.status =
+                job.settings.provider === 'kiro' && !error.terminationUnconfirmed
+                  ? 'needs_attention'
+                  : 'failed';
               current.error = String(error.message || error).slice(0, 1000);
               current.finishedAt = now();
               this.store.put('job', current);
@@ -896,6 +952,37 @@ class WorkEngine {
       this.busy = false;
       this.controller = null;
       this.activeId = null;
+    }
+  }
+  async syncDuringApproval(jobId) {
+    const job = this.store.get('job', jobId);
+    if (!job || job.status !== 'queued' || this.syncBusy || this.closed) return;
+    this.syncBusy = true;
+    this.syncId = jobId;
+    this.syncController = new AbortController();
+    this.store.transaction(() => {
+      job.status = 'running';
+      job.startedAt = now();
+      this.store.put('job', job);
+    });
+    try {
+      await this.sync(job, this.syncController.signal);
+    } catch (error) {
+      if (error.terminationUnconfirmed) this.halted = error.message;
+      this.store.transaction(() => {
+        const current = this.store.get('job', jobId);
+        if (current.status !== 'cancelled') {
+          current.status = 'failed';
+          current.error = String(error.message || error).slice(0, 1000);
+          current.finishedAt = now();
+          this.store.put('job', current);
+        }
+      });
+    } finally {
+      this.syncBusy = false;
+      this.syncController = null;
+      this.syncId = null;
+      if (!this.closed) void this.drain();
     }
   }
   async openSource(messageId) {
@@ -925,8 +1012,12 @@ class WorkEngine {
         return this.readTask(value);
       case 'readMessage':
         return this.readMessage(value);
-      case 'sync':
-        return this.enqueue('sync');
+      case 'sync': {
+        const jobId = this.enqueue('sync');
+        if ([...this.sessions.values()].some((session) => session.pending.size))
+          void this.syncDuringApproval(jobId);
+        return jobId;
+      }
       case 'processPending':
         return this.processPending();
       case 'chat':
@@ -937,6 +1028,22 @@ class WorkEngine {
         return this.enqueue('draft', value);
       case 'cancel':
         return this.cancel(value);
+      case 'dismissAttention': {
+        const job = this.store.get('job', text(value, 'job ID', 100));
+        if (!job || job.status !== 'needs_attention')
+          throw new Error('Job does not need attention');
+        return this.mutate(() => {
+          job.attentionDismissed = true;
+          this.store.put('job', job);
+        });
+      }
+      case 'permission': {
+        if (!value || typeof value.jobId !== 'string')
+          throw new Error('Invalid permission decision');
+        const session = this.sessions.get(value.jobId);
+        if (!session) throw new Error('Kiro session is no longer active');
+        return session.decide(value);
+      }
       case 'retry':
         return this.retry(value);
       case 'suggestion':
@@ -977,6 +1084,7 @@ class WorkEngine {
   close() {
     this.closed = true;
     this.controller?.abort();
+    this.syncController?.abort();
   }
 }
 module.exports = { WorkEngine };

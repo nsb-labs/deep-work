@@ -48,59 +48,6 @@ function promptFor(input) {
     '\nEND INPUT JSON',
   ].join('\n');
 }
-function parseKiroResult(raw) {
-  try {
-    const result = parseJsonResult(raw);
-    if (
-      Object.hasOwn(result, 'text') &&
-      Array.isArray(result.changes) &&
-      Array.isArray(result.facts)
-    )
-      return result;
-  } catch {}
-  const events = raw
-    .trim()
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => {
-      try {
-        return JSON.parse(line);
-      } catch {
-        throw new Error('Kiro returned non-JSON stream output; use a supported CLI version.');
-      }
-    });
-  const assistant = [];
-  const deltas = [];
-  const contentText = (value) =>
-    typeof value === 'string'
-      ? value
-      : Array.isArray(value)
-        ? value
-            .filter((c) => c.type === 'text')
-            .map((c) => c.text || '')
-            .join('')
-        : '';
-  for (const event of events) {
-    if (event.type === 'error' || event.type === 'interrupted' || event.is_error === true)
-      throw new Error('Kiro run failed or was interrupted');
-    if (event.type === 'assistant' || (event.type === 'message' && event.role === 'assistant')) {
-      const text = contentText(
-        event.message?.content ??
-          event.content ??
-          event.data?.content ??
-          event.data?.text ??
-          event.text,
-      );
-      if (text) assistant.push(text);
-    }
-    if (['text_delta', 'assistant_text_delta'].includes(event.type)) {
-      const text = event.text ?? event.data?.text ?? event.delta?.text;
-      if (typeof text === 'string') deltas.push(text);
-    }
-    if (event.type === 'result' && typeof event.result === 'string') assistant.push(event.result);
-  }
-  return parseJsonResult(assistant.at(-1) || deltas.join(''));
-}
 function parseJsonResult(raw) {
   const clean = raw.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').trim();
   // Permit a single fenced response, but reject mixed terminal chatter / arbitrary brace extraction.
@@ -148,16 +95,24 @@ function prepareLaunch(p, args, directory) {
   }
   return { launch, onStop };
 }
-async function runCli(input, directory, signal) {
+async function runCli(input, directory, signal, options = {}) {
   const p = input.settings;
   if (!p.organizationApproved)
     throw new Error('Configure an organization-approved CLI before processing real email');
   const prompt = promptFor(input);
+  if (p.provider === 'kiro') {
+    const { runKiro } = require('./kiro-acp.cjs');
+    return parseJsonResult(
+      await runKiro(prompt, directory, p, signal, { ...options, structured: true }),
+    );
+  }
   fs.writeFileSync(path.join(directory, 'result.schema.json'), JSON.stringify(resultSchema));
   const target = p.execution === 'wsl' ? wslPath(directory) : directory;
   let args;
   if (p.provider === 'codex') {
     args = [
+      '--ask-for-approval',
+      'never',
       'exec',
       '--skip-git-repo-check',
       '--sandbox',
@@ -167,35 +122,6 @@ async function runCli(input, directory, signal) {
       '--output-last-message',
       `${target}/result.json`,
       '-',
-    ];
-  } else {
-    // No blanket trust. Agents/MCP configured outside DeepWork remain an organization responsibility.
-    if (!p.agent) {
-      const agents = path.join(directory, '.kiro', 'agents');
-      fs.mkdirSync(agents, { recursive: true });
-      fs.writeFileSync(
-        path.join(agents, 'deepwork.json'),
-        JSON.stringify({
-          name: 'deepwork',
-          description: 'DeepWork structured email processing without tools',
-          tools: [],
-          allowedTools: [],
-          resources: [],
-          mcpServers: {},
-          includeMcpJson: false,
-          hooks: {},
-        }),
-      );
-    }
-    args = [
-      'chat',
-      '--agent-engine',
-      'v3',
-      '--no-interactive',
-      '--output-format',
-      'stream-json',
-      '--agent',
-      p.agent || 'deepwork',
     ];
   }
   const { launch, onStop } = prepareLaunch(p, args, directory);
@@ -234,6 +160,5 @@ module.exports = {
   invocation,
   promptFor,
   parseJsonResult,
-  parseKiroResult,
   wslPath,
 };

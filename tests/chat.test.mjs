@@ -6,12 +6,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { WorkEngine } = require('../service/core/engine.cjs');
-const {
-  jsonLines,
-  codexProtocol,
-  kiroProtocol,
-  runChat,
-} = require('../service/providers/chat.cjs');
+const { jsonLines, codexProtocol, runChat } = require('../service/providers/chat.cjs');
 const { runProcess } = require('../service/providers/process.cjs');
 async function fixture(t, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deepwork-chat-'));
@@ -165,16 +160,6 @@ test('Codex handshake streams text, reconciles final items, rejects tool request
   p.event({ method: 'turn/completed', params: { turn: { status: 'completed' } } });
   assert.equal(ended, true);
   assert.equal(p.finish(), 'Hello world');
-});
-test('Kiro text deltas stream without duplicating its final assistant response', () => {
-  const updates = [],
-    p = kiroProtocol((text) => updates.push(text));
-  p.event({ type: 'text_delta', text: 'Hello ' });
-  p.event({ type: 'text_delta', text: 'world' });
-  p.event({ type: 'assistant', message: { content: [{ type: 'text', text: 'Hello world' }] } });
-  assert.deepEqual(updates.slice(0, 2), ['Hello ', 'Hello world']);
-  assert.equal(p.finish(), 'Hello world');
-  assert.throws(() => p.event({ type: 'interrupted' }), /interrupted/);
 });
 test('chat transport drives a real duplex subprocess and forwards partial output before process exit', async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deepwork-chat-provider-'));

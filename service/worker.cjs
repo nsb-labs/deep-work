@@ -14,7 +14,8 @@ let engine;
         throw new Error('Invalid request');
       if (request.operation === 'shutdown') {
         engine.close();
-        while (engine.busy) await new Promise((resolve) => setTimeout(resolve, 50));
+        while (engine.busy || engine.syncBusy)
+          await new Promise((resolve) => setTimeout(resolve, 50));
         engine.store.close();
         send({ id: request.id, result: { closed: true } });
         setImmediate(() => process.exit(0));

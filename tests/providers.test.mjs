@@ -50,18 +50,3 @@ test('process output preserves Unicode split across byte chunks', async () => {
   ]);
   assert.equal(result.stdout, '€');
 });
-
-test('Kiro JSON event adapter reads final assistant content and rejects interrupted runs', () => {
-  const { parseKiroResult } = require('../service/providers/cli.cjs');
-  const raw = [
-    { type: 'metadata', data: { meteringUsage: [] } },
-    {
-      type: 'assistant',
-      message: { content: [{ type: 'text', text: '{"text":"summary","changes":[],"facts":[]}' }] },
-    },
-  ]
-    .map(JSON.stringify)
-    .join('\n');
-  assert.equal(parseKiroResult(raw).text, 'summary');
-  assert.throws(() => parseKiroResult(JSON.stringify({ type: 'interrupted' })), /interrupted/);
-});

@@ -24,7 +24,7 @@ Enter an actual executable path or a native executable discoverable through PATH
 
 Authenticate using the CLI's own documented organization-approved method. Settings stores no tokens. **Check saved CLI configuration** runs `--version` and confirms discovery; actual jobs confirm authentication and result-format compatibility.
 
-Kiro's adapter targets V3 headless mode. The generated `deepwork` agent has no tools, resources, or MCP servers and disables workspace MCP inclusion. A custom agent name selects the organization's existing configuration; its tools/hooks and global CLI settings remain the organization's responsibility. Kiro authentication requirements vary by release and account; follow [official headless documentation](https://kiro.dev/docs/cli/headless/). Codex uses its own saved authentication and read-only sandbox.
+Kiro's adapter targets V3 ACP using `--agent-engine=v3 --auth-method=cli`. The generated `deepwork` agent has no tools, resources, or MCP servers and disables workspace MCP inclusion and powers. The requested agent mode is verified before prompting. A custom agent name selects the organization's existing configuration; its tools/hooks and global CLI settings remain the organization's responsibility. Kiro authentication requirements vary by release and account; follow [official ACP migration documentation](https://kiro.dev/docs/cli/v3/acp-migration/). Codex uses its own saved authentication and read-only sandbox.
 
 ## WSL mode
 
@@ -74,7 +74,9 @@ CI checks the engine/build and PowerShell syntax. It does not have an Outlook pr
 
 **Unprocessed messages:** configure/approve the CLI, check Processing, and retry failures. VIP/manager messages remain visible independently of inference.
 
-**Malformed Kiro output:** confirm a V3 CLI with stream-json and the selected agent is available. Do not enable blanket tool trust. Capture only a synthetic reproduction before opening a public issue.
+**Kiro needs attention:** open the bottom console for one-time permission choices. If login is required, complete it in the configured CLI environment and retry the job.
+
+**Malformed Kiro output:** confirm V3 ACP support and that the selected agent mode is available. Do not enable blanket tool trust. Capture only a synthetic reproduction before opening a public issue.
 
 **Workspace service failed:** preserve `deepwork.sqlite`. Check folder permissions and schema compatibility. Do not delete the database as a routine repair. Rebuild Markdown when only projections fail.
 

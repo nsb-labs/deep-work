@@ -14,8 +14,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "smoke:desktop": "electron desktop-smoke.cjs",
     "verify:outlook": "node scripts/verify-outlook.cjs",
-    "format": "prettier --write src electron service tests scripts docs desktop-smoke.cjs README.md CONTRIBUTING.md SECURITY.md package.json tsconfig*.json vite.config.mts .github",
-    "format:check": "prettier --check src electron service tests scripts docs desktop-smoke.cjs README.md CONTRIBUTING.md SECURITY.md package.json tsconfig*.json vite.config.mts .github"
+    "format": "prettier --write src electron service tests scripts docs desktop-smoke.cjs desktop-attention-smoke.cjs README.md CONTRIBUTING.md SECURITY.md package.json tsconfig*.json vite.config.mts .github",
+    "format:check": "prettier --check src electron service tests scripts docs desktop-smoke.cjs desktop-attention-smoke.cjs README.md CONTRIBUTING.md SECURITY.md package.json tsconfig*.json vite.config.mts .github",
+    "smoke:attention": "electron desktop-attention-smoke.cjs"
   },
   "dependencies": {
     "react": "18.3.1",

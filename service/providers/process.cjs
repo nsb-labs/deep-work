@@ -79,9 +79,28 @@ function runProcess(
     const cancel = () => {
       void stop('Cancelled');
     };
-    const timer = setTimeout(() => {
-      void stop(`Process timed out after ${timeout / 1000}s`);
-    }, timeout);
+    let remaining = timeout,
+      started = Date.now(),
+      paused = false,
+      timer;
+    const arm = () => {
+      started = Date.now();
+      timer = setTimeout(
+        () => {
+          void stop(`Process timed out after ${timeout / 1000}s`);
+        },
+        Math.max(1, remaining),
+      );
+    };
+    const setPaused = (value) => {
+      if (settled || stopping || value === paused) return;
+      paused = value;
+      if (value) {
+        remaining -= Date.now() - started;
+        clearTimeout(timer);
+      } else arm();
+    };
+    arm();
     signal?.addEventListener('abort', cancel, { once: true });
     child.on('error', (e) => finish(new Error(`Cannot launch ${command}: ${e.message}`)));
     child.stdin.on('error', () => {});
@@ -132,6 +151,7 @@ function runProcess(
         onStart(
           (data) => child.stdin.write(data),
           () => child.stdin.end(),
+          setPaused,
         );
       else child.stdin.end(input);
     } catch (error) {

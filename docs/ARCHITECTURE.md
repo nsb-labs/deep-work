@@ -40,7 +40,7 @@ flowchart LR
 | [service/connectors/outlook.ps1](../service/connectors/outlook.ps1) | Classic Outlook COM, folder pages, source opening, SMTP recipient normalization         | Model calls, task mutations, sending      |
 | [service/connectors/demo.cjs](../service/connectors/demo.cjs)       | Synthetic mail and deterministic demo provider                                          | Live email processing                     |
 | [service/providers/process.cjs](../service/providers/process.cjs)   | Argument-vector spawning, stdin, output limits, timeout/cancellation, Unicode decoding  | Prompt construction                       |
-| [service/providers/cli.cjs](../service/providers/cli.cjs)           | Common prompt, Codex schema/artifact adapter, Kiro event adapter, native/WSL launch     | Applying unvalidated output               |
+| [service/providers/cli.cjs](../service/providers/cli.cjs)           | Common prompt, Codex schema/artifact adapter, Kiro ACP adapter, native/WSL launch       | Applying unvalidated output               |
 
 ## One sync, end to end
 
@@ -161,7 +161,7 @@ The renderer uses semantic CSS color tokens with dark and light palettes in `src
 
 Selecting a task opens `src/components/TaskChat.tsx`. The `chat` operation creates a user message, a queued assistant message, and a processing job atomically. There is at most one active chat turn per task. Each turn rebuilds context from the latest task, linked email threads, active related memory, and up to 20 completed messages from successful turns for that same task. Context uses the configured estimated token budget; answers are capped at 1 MB. Recent dialogue is retained in complete user/assistant pairs. A user can explicitly include an older linked email in the next turn. Provider selection and approval are frozen with the job.
 
-`service/providers/chat.cjs` separates conversation output from the structured classification/draft contract. Codex uses its CLI’s [app-server stdio protocol](https://developers.openai.com/codex/app-server), including initialization, `thread/start`, `turn/start`, and `item/agentMessage/delta`. Each turn uses a fresh provider thread with DeepWork’s bounded conversation context. Kiro uses [headless stream-json](https://kiro.dev/docs/cli/headless/) and its selected agent; the generated default agent has no tools. Actual event compatibility still needs live validation with each organization’s CLI versions.
+`service/providers/chat.cjs` separates conversation output from the structured classification/draft contract. Codex uses its CLI’s [app-server stdio protocol](https://developers.openai.com/codex/app-server), including initialization, `thread/start`, `turn/start`, and `item/agentMessage/delta`. Each turn uses a fresh provider thread with DeepWork’s bounded conversation context. Kiro uses [ACP](https://kiro.dev/docs/cli/acp/) through `service/providers/kiro-acp.cjs` and its selected agent; the generated default agent has no tools. Actual event compatibility still needs live validation with each organization’s CLI versions.
 
 The process runner supports duplex stdin and incremental stdout while retaining timeout/output limits and process-tree cancellation. Both inference and chat share native/WSL invocation and WSL process-group cleanup in `prepareLaunch`. JSON Lines framing preserves split UTF-8 characters. Codex interactive tool/approval requests are rejected; Codex is configured with read-only sandbox and approval policy never. No model is hardcoded, so the CLI’s organization configuration selects it.
 
@@ -178,3 +178,11 @@ Classification supplies all pending sources that fit, oldest first, up to 20 per
 Linked tasks are supplied as compact records without history; up to five additional matching active tasks can fit. At most five related memory facts and two older background sources are considered. Task chat starts with the latest source and offers explicit selection of an older original email. Provider inputs omit Outlook COM/store IDs, local executable configuration, task histories, and unrelated tasks. `providerPayload` defines this boundary.
 
 The configurable budget ranges from 4,000 to 64,000 estimated input tokens, with an 8,000 default. The estimate uses UTF-8 JSON bytes divided by two plus a 2,000-token protocol/schema reserve. It is a portable heuristic, not a model-specific tokenizer or a promise about billed usage. Processing displays estimate, budget, source counts, and removed character counts. Message fingerprints cover meaningful content instead of Outlook modification timestamps; metadata-only changes preserve existing processed/evidence versions, including legacy workspaces.
+
+## Kiro attention and approvals
+
+`service/core/attention.cjs` owns bounded live console output, approval callbacks, expiry and one-time decisions. `service/providers/kiro-acp.cjs` owns the provider handshake and translates ACP permission RPCs. The engine persists job states and minimal decision audit metadata; the renderer sends the named `permission` operation through the existing validated IPC boundary. No executable, stdin command or filesystem operation is accepted from the console.
+
+A Kiro job can transition `running → awaiting_approval → running → succeeded`. Stop cancels the original process; unresolved requests expire after five minutes. A Kiro failure becomes `needs_attention`, preserving pending messages, with explicit retry or dismissal. Restart invalidates every live request. The renderer polls the same snapshot for the global collapsible console, while task answer text continues to use the existing streaming event channel.
+
+A requested Outlook scan can run independently while AI awaits approval. It has its own cancellation controller. Additional inference stays serialized; source/version validation still rejects stale results after an overlapping scan. Shutdown waits for both scans and inference to terminate.

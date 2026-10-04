@@ -32,3 +32,11 @@ Added checks for streamed partial answers before job completion, task/source/mem
 ## Email context efficiency
 
 Behavioral checks cover verified quoted-suffix cleanup, preservation of uncertain inline replies and action-bearing footers, grouped thread processing, SentOn ordering, batch continuation without marking unseen sources processed, oversized-message failures, metadata-only change suppression and legacy version preservation, compact provider projection, stale-source rollback, explicit older-email chat context, and preservation of original cached bodies. Live Outlook SentOn extraction and localized formatting still need Windows verification. Token estimates are heuristic; no model-account token-cost benchmark was run.
+
+## Kiro attention flow
+
+`tests/attention.test.mjs` covers scoped single-use choices, cancellation, expiry, restart invalidation, pending-mail preservation, continued sync during approval and a real synthetic duplex ACP subprocess that waits longer than its execution timeout for a user decision. `npm run smoke:attention` exercises actual Electron main/preload/worker/renderer wiring with a synthetic executable on a POSIX development host, including automatic panel expansion, hiding without cancellation, denial/resume and stale decision rejection. It contacts no model or mailbox. This fixture does not establish Windows/Kiro compatibility.
+
+Before rollout, validate native/WSL Kiro ACP v1 handshake, organization-agent selection, `agent_message_chunk` streaming, permission requests (approve and deny), stop/expiry process cleanup and login-required retry on the installed version. Arbitrary terminal/TUI prompts are not supported by the structured console; authentication is completed separately in the selected CLI environment.
+
+Recorded on 2026-10-04: 63 tests passed, one Windows-only test skipped; typecheck/build and formatting passed. Both desktop smoke tests passed on the macOS development host. The existing smoke initially returned Electron's `UnknownVizError` and passed on retry; the approval smoke passed before and after the final V3 launch update. Installed Codex accepted the explicit `--ask-for-approval never exec --help` option check without running a model. Kiro was not installed on this host, so no live Kiro/model/Windows approval claim is made.

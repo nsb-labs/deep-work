@@ -606,3 +606,37 @@ textarea {
   justify-content: space-between;
   margin-top: 10px;
 }
+
+.kiro-console {
+  border-top: 1px solid var(--divider);
+  background: var(--detail);
+  flex-shrink: 0;
+}
+.console-toggle {
+  width: 100%;
+  text-align: left;
+  border-radius: 0 !important;
+}
+.console-body {
+  max-height: 36vh;
+  overflow: auto;
+  padding: 12px 20px;
+}
+.console-output {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  max-height: 160px;
+  overflow: auto;
+  user-select: text;
+}
+.permission-card {
+  border: 1px solid var(--divider);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 10px 0;
+}
+.status-pill.awaiting_approval,
+.status-pill.needs_attention {
+  color: var(--warning-text);
+}
